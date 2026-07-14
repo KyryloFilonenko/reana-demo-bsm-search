@@ -79,12 +79,12 @@ rule generate:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + f"""
-        case {{wildcards.sample}} in
-{_GEN_CASE}
+        ROOTENV + """
+        case {wildcards.sample} in
+""" + _GEN_CASE + """
         esac
-        seed=$(( {BASE_SEED} + offset + {{wildcards.b}} ))
-        python /code/generantuple.py {{wildcards.sample}} $nevents {{output}} $seed
+        seed=$(( """ + str(BASE_SEED) + """ + offset + {wildcards.b} ))
+        python /code/generantuple.py {wildcards.sample} $nevents {output} $seed
         """
 
 
@@ -204,13 +204,12 @@ rule mc_hist_weights:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + f"""
-        case {{wildcards.mc}} in
-          mc1) weight={MC_WEIGHTS['mc1']} ;;
-          mc2) weight={MC_WEIGHTS['mc2']} ;;
+        ROOTENV + """
+        case {wildcards.mc} in
+          mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
+          mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
         esac
-        python /code/histogram.py {{input}} {{output}} {{wildcards.mc}} $weight {WEIGHT_VARIATIONS}
-        """
+        python /code/histogram.py {input} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS
 
 
 rule mc_select_shape:
