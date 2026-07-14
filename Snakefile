@@ -67,17 +67,25 @@ rule all:
 # ---------------------------------------------------------------------------
 # Generation (shared by all samples; Yadage stage "read" in each branch)
 # ---------------------------------------------------------------------------
+_GEN_CASE = "\n".join(
+    f"          {s}) nevents={NEVENTS[s]}; offset={SEED_OFFSET[s]} ;;"
+    for s in ["data", "sig", "mc1", "mc2"]
+)
+
+
 rule generate:
     output:
         "generated/{sample}/batch_{b}.root",
-    params:
-        nevents=lambda wc: NEVENTS[wc.sample],
-        seed=lambda wc: BASE_SEED + SEED_OFFSET[wc.sample] + int(wc.b),
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/generantuple.py {wildcards.sample} "
-        "{params.nevents} {output} {params.seed}"
+        ROOTENV + f"""
+        case {{wildcards.sample}} in
+{_GEN_CASE}
+        esac
+        seed=$(( {BASE_SEED} + offset + {{wildcards.b}} ))
+        python /code/generantuple.py {{wildcards.sample}} $nevents {{output}} $seed
+        """
 
 
 rule merge_generated:
@@ -193,13 +201,16 @@ rule mc_hist_weights:
         "selected/{mc}_signal_weights.root",
     output:
         "hists/{mc}_weights.root",
-    params:
-        weight=lambda wc: MC_WEIGHTS[wc.mc],
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/histogram.py {input} {output} "
-        "{wildcards.mc} {params.weight} " + WEIGHT_VARIATIONS
+        ROOTENV + f"""
+        case {{wildcards.mc}} in
+          mc1) weight={MC_WEIGHTS['mc1']} ;;
+          mc2) weight={MC_WEIGHTS['mc2']} ;;
+        esac
+        python /code/histogram.py {{input}} {{output}} {{wildcards.mc}} $weight {WEIGHT_VARIATIONS}
+        """
 
 
 rule mc_select_shape:
@@ -218,13 +229,16 @@ rule mc_hist_shape:
         "selected/{mc}_signal_{shapevar}.root",
     output:
         "hists/{mc}_{shapevar}.root",
-    params:
-        weight=lambda wc: MC_WEIGHTS[wc.mc],
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/histogram.py {input} {output} "
-        "{wildcards.mc}_{wildcards.shapevar} {params.weight} nominal '{{name}}'"
+        ROOTENV + """
+        case {wildcards.mc} in
+          mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
+          mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
+        esac
+        python /code/histogram.py {input} {output} """ \
+        "{wildcards.mc}_{wildcards.shapevar} $weight nominal '{{name}}'"
 
 
 rule mc_mergeallvars:
