@@ -101,7 +101,7 @@ rule merge_generated:
     container:
         IMG_ROOT6
     shell:
-        ROOTENV + "hadd {output} {input}"
+        ROOTENV + "mkdir -p $(dirname {output}) && hadd {output} {input}"
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +115,8 @@ rule data_select:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/select.py {input} {output} {wildcards.region} nominal"
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "python /code/select.py {input} {output} {wildcards.region} nominal"
 
 
 rule data_hist_signal:
@@ -126,7 +127,8 @@ rule data_hist_signal:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/histogram.py {input} {output} data 1.0 nominal"
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "python /code/histogram.py {input} {output} data 1.0 nominal"
 
 
 rule data_hist_control:
@@ -139,7 +141,8 @@ rule data_hist_control:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/histogram.py {input} {output} qcd {params.weight} nominal"
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "python /code/histogram.py {input} {output} qcd {params.weight} nominal"
 
 
 rule data_mergeall:
@@ -151,7 +154,7 @@ rule data_mergeall:
     container:
         IMG_ROOT6
     shell:
-        ROOTENV + "hadd {output} {input}"
+        ROOTENV + "mkdir -p $(dirname {output}) && hadd {output} {input}"
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +168,8 @@ rule sig_select:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/select.py {input} {output} signal nominal"
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "python /code/select.py {input} {output} signal nominal"
 
 
 rule sig_hist:
@@ -178,7 +182,8 @@ rule sig_hist:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/histogram.py {input} {output} signal {params.weight} nominal"
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "python /code/histogram.py {input} {output} signal {params.weight} nominal"
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +199,8 @@ rule mc_select_weights:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/select.py {input} {output} signal " + WEIGHT_VARIATIONS
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "python /code/select.py {input} {output} signal " + WEIGHT_VARIATIONS
 
 
 rule mc_hist_weights:
@@ -206,10 +212,11 @@ rule mc_hist_weights:
         IMG_MAIN
     shell:
         ROOTENV + """
+        mkdir -p $(dirname {output}) && \
         case {wildcards.mc} in
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
-        esac
+        esac && \
         python /code/histogram.py {input} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS
 
 
@@ -221,7 +228,8 @@ rule mc_select_shape:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "python /code/select.py {input} {output} signal {wildcards.shapevar}"
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "python /code/select.py {input} {output} signal {wildcards.shapevar}"
 
 
 rule mc_hist_shape:
@@ -233,10 +241,11 @@ rule mc_hist_shape:
         IMG_MAIN
     shell:
         ROOTENV + """
+        mkdir -p $(dirname {output}) && \
         case {wildcards.mc} in
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
-        esac
+        esac && \
         python /code/histogram.py {input} {output} """ \
         "{wildcards.mc}_{wildcards.shapevar} $weight nominal '{{name}}'"
 
@@ -250,7 +259,7 @@ rule mc_mergeallvars:
     container:
         IMG_ROOT6
     shell:
-        ROOTENV + "hadd {output} {input}"
+        ROOTENV + "mkdir -p $(dirname {output}) && hadd {output} {input}"
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +275,8 @@ rule merge_all:
     container:
         IMG_ROOT6
     shell:
-        ROOTENV + "hadd {output} {input.signal} {input.data} {input.background}"
+        ROOTENV + "mkdir -p $(dirname {output}) && "
+        "hadd {output} {input.signal} {input.data} {input.background}"
 
 
 rule makews:
@@ -291,6 +301,7 @@ rule plot:
         IMG_MAIN
     shell:
         ROOTENV +
+        "mkdir -p plot && "
         "hfquickplot write-vardef {input} combined plot/nominal_vals.yml && "
         "hfquickplot plot-channel {input} combined channel1 x plot/nominal_vals.yml "
         "-c qcd,mc2,mc1,signal -o {output.prefit} && "
@@ -308,6 +319,7 @@ rule hepdata:
         IMG_MAIN
     shell:
         ROOTENV +
+        "mkdir -p hepdata && "
         "python /code/hepdata_export.py {input} "
         "hepdata/submission.yaml hepdata/data1.yaml && "
         "cd hepdata && zip submission.zip submission.yaml data1.yaml"
