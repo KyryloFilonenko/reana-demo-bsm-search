@@ -43,6 +43,11 @@ SHAPE_VARS = ["shape_conv_up", "shape_conv_dn"]
 BASE_SEED = 42
 SEED_OFFSET = {"data": 0, "sig": 100, "mc1": 200, "mc2": 300}
 
+# Shape-variation seeds (select.py's apply_shape draws a per-event random
+# shift for shape_conv_up/dn; needs its own seed, kept well clear of the
+# batch seeds above).
+SHAPE_SEED_OFFSET = {"shape_conv_up": 1000, "shape_conv_dn": 2000}
+
 IMG_MAIN  = "docker://docker.io/reanahub/reana-demo-bsm-search:1.0.0"
 IMG_ROOT6 = "docker://docker.io/reanahub/reana-env-root6:6.18.04"
 
@@ -220,6 +225,12 @@ rule mc_hist_weights:
         python /code/histogram.py {input} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS
 
 
+_SHAPE_SEED_CASE = "\n".join(
+    f"          {mc}_{sv}) seed=$(( {BASE_SEED} + {SEED_OFFSET[mc]} + {SHAPE_SEED_OFFSET[sv]} )) ;;"
+    for mc in MC_SAMPLES for sv in SHAPE_VARS
+)
+
+
 rule mc_select_shape:
     input:
         "merged/{mc}.root",
@@ -228,8 +239,13 @@ rule mc_select_shape:
     container:
         IMG_MAIN
     shell:
-        ROOTENV + "mkdir -p $(dirname {output}) && "
-        "python /code/select.py {input} {output} signal {wildcards.shapevar}"
+        ROOTENV + """
+        mkdir -p $(dirname {output}) && \
+        case {wildcards.mc}_{wildcards.shapevar} in
+""" + _SHAPE_SEED_CASE + """
+        esac && \
+        python /code/select.py {input} {output} signal {wildcards.shapevar} $seed
+        """
 
 
 rule mc_hist_shape:
