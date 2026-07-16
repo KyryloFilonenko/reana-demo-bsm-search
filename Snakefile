@@ -90,7 +90,7 @@ rule generate:
 """ + _GEN_CASE + """
         esac && \
         seed=$(( """ + str(BASE_SEED) + """ + offset + {wildcards.b} )) && \
-        python /code/generantuple.py {wildcards.sample} $nevents {output} $seed
+        python code/generantuple.py {wildcards.sample} $nevents {output} $seed
         """
 
 
@@ -121,7 +121,7 @@ rule data_select:
         IMG_MAIN
     shell:
         ROOTENV + "mkdir -p $(dirname {output}) && "
-        "python /code/select.py {input} {output} {wildcards.region} nominal"
+        "python code/select.py {input} {output} {wildcards.region} nominal"
 
 
 rule data_hist_signal:
@@ -133,7 +133,7 @@ rule data_hist_signal:
         IMG_MAIN
     shell:
         ROOTENV + "mkdir -p $(dirname {output}) && "
-        "python /code/histogram.py {input} {output} data 1.0 nominal"
+        "python code/histogram.py {input} {output} data 1.0 nominal"
 
 
 rule data_hist_control:
@@ -147,7 +147,7 @@ rule data_hist_control:
         IMG_MAIN
     shell:
         ROOTENV + "mkdir -p $(dirname {output}) && "
-        "python /code/histogram.py {input} {output} qcd {params.weight} nominal"
+        "python code/histogram.py {input} {output} qcd {params.weight} nominal"
 
 
 rule data_mergeall:
@@ -174,7 +174,7 @@ rule sig_select:
         IMG_MAIN
     shell:
         ROOTENV + "mkdir -p $(dirname {output}) && "
-        "python /code/select.py {input} {output} signal nominal"
+        "python code/select.py {input} {output} signal nominal"
 
 
 rule sig_hist:
@@ -188,7 +188,7 @@ rule sig_hist:
         IMG_MAIN
     shell:
         ROOTENV + "mkdir -p $(dirname {output}) && "
-        "python /code/histogram.py {input} {output} signal {params.weight} nominal"
+        "python code/histogram.py {input} {output} signal {params.weight} nominal"
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +205,7 @@ rule mc_select_weights:
         IMG_MAIN
     shell:
         ROOTENV + "mkdir -p $(dirname {output}) && "
-        "python /code/select.py {input} {output} signal " + WEIGHT_VARIATIONS
+        "python code/select.py {input} {output} signal " + WEIGHT_VARIATIONS
 
 
 rule mc_hist_weights:
@@ -222,7 +222,7 @@ rule mc_hist_weights:
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
         esac && \
-        python /code/histogram.py {input} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS
+        python code/histogram.py {input} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS
 
 
 _SHAPE_SEED_CASE = "\n".join(
@@ -244,7 +244,7 @@ rule mc_select_shape:
         case {wildcards.mc}_{wildcards.shapevar} in
 """ + _SHAPE_SEED_CASE + """
         esac && \
-        python /code/select.py {input} {output} signal {wildcards.shapevar} $seed
+        python code/select.py {input} {output} signal {wildcards.shapevar} $seed
         """
 
 
@@ -262,7 +262,7 @@ rule mc_hist_shape:
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
         esac && \
-        python /code/histogram.py {input} {output} """ \
+        python code/histogram.py {input} {output} """ \
         "{wildcards.mc}_{wildcards.shapevar} $weight nominal '{{name}}'"
 
 
@@ -304,7 +304,7 @@ rule makews:
         IMG_MAIN
     shell:
         ROOTENV + "mkdir -p ws/xmldir && "
-        "python /code/makews.py {input} ws/workspace ws/xmldir"
+        "python code/makews.py {input} ws/workspace ws/xmldir"
 
 
 rule plot:
@@ -336,6 +336,6 @@ rule hepdata:
     shell:
         ROOTENV +
         "mkdir -p hepdata && "
-        "python /code/hepdata_export.py {input} "
+        "python code/hepdata_export.py {input} "
         "hepdata/submission.yaml hepdata/data1.yaml && "
         "cd hepdata && zip submission.zip submission.yaml data1.yaml"
