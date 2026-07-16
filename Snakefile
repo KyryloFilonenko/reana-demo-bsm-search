@@ -80,10 +80,11 @@ rule generate:
         IMG_MAIN
     shell:
         ROOTENV + """
+        mkdir -p $(dirname {output}) && \
         case {wildcards.sample} in
 """ + _GEN_CASE + """
-        esac
-        seed=$(( """ + str(BASE_SEED) + """ + offset + {wildcards.b} ))
+        esac && \
+        seed=$(( """ + str(BASE_SEED) + """ + offset + {wildcards.b} )) && \
         python /code/generantuple.py {wildcards.sample} $nevents {output} $seed
         """
 
