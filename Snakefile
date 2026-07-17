@@ -51,7 +51,7 @@ SHAPE_SEED_OFFSET = {"shape_conv_up": 1000, "shape_conv_dn": 2000}
 IMG_MAIN  = "docker://docker.io/reanahub/reana-demo-bsm-search:1.0.0"
 IMG_ROOT6 = "docker://docker.io/reanahub/reana-env-root6:6.18.04"
 
-ROOTENV = "source /usr/local/bin/thisroot.sh && "
+ROOTENV = "set +u && source /usr/local/bin/thisroot.sh && "
 
 
 def shell_cmd(cmd, mkdir="$(dirname {output})"):
