@@ -91,6 +91,8 @@ _GEN_CASE = "\n".join(
 
 
 rule generate:
+    input:
+        "code/generantuple.py",
     output:
         "generated/{sample}/batch_{b}.root",
     container:
@@ -125,29 +127,32 @@ rule merge_generated:
 # ---------------------------------------------------------------------------
 rule data_select:
     input:
-        "merged/data.root",
+        root="merged/data.root",
+        script="code/select.py",
     output:
         "selected/data_{region}.root",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/select.py {input} {output} {wildcards.region} nominal")
+        shell_cmd("python code/select.py {input.root} {output} {wildcards.region} nominal")
 
 
 rule data_hist_signal:
     input:
-        "selected/data_signal.root",
+        root="selected/data_signal.root",
+        script="code/histogram.py",
     output:
         "hists/data_signal.root",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/histogram.py {input} {output} data 1.0 nominal")
+        shell_cmd("python code/histogram.py {input.root} {output} data 1.0 nominal")
 
 
 rule data_hist_control:
     input:
-        "selected/data_control.root",
+        root="selected/data_control.root",
+        script="code/histogram.py",
     output:
         "hists/data_control.root",
     params:
@@ -155,7 +160,7 @@ rule data_hist_control:
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/histogram.py {input} {output} qcd {params.weight} nominal")
+        shell_cmd("python code/histogram.py {input.root} {output} qcd {params.weight} nominal")
 
 
 rule data_mergeall:
@@ -175,18 +180,20 @@ rule data_mergeall:
 # ---------------------------------------------------------------------------
 rule sig_select:
     input:
-        "merged/sig.root",
+        root="merged/sig.root",
+        script="code/select.py",
     output:
         "selected/sig_signal.root",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/select.py {input} {output} signal nominal")
+        shell_cmd("python code/select.py {input.root} {output} signal nominal")
 
 
 rule sig_hist:
     input:
-        "selected/sig_signal.root",
+        root="selected/sig_signal.root",
+        script="code/histogram.py",
     output:
         "branch/sig.root",
     params:
@@ -194,7 +201,7 @@ rule sig_hist:
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/histogram.py {input} {output} signal {params.weight} nominal")
+        shell_cmd("python code/histogram.py {input.root} {output} signal {params.weight} nominal")
 
 
 # ---------------------------------------------------------------------------
@@ -204,18 +211,20 @@ rule sig_hist:
 # ---------------------------------------------------------------------------
 rule mc_select_weights:
     input:
-        "merged/{mc}.root",
+        root="merged/{mc}.root",
+        script="code/select.py",
     output:
         "selected/{mc}_signal_weights.root",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/select.py {input} {output} signal " + WEIGHT_VARIATIONS)
+        shell_cmd("python code/select.py {input.root} {output} signal " + WEIGHT_VARIATIONS)
 
 
 rule mc_hist_weights:
     input:
-        "selected/{mc}_signal_weights.root",
+        root="selected/{mc}_signal_weights.root",
+        script="code/histogram.py",
     output:
         "hists/{mc}_weights.root",
     container:
@@ -226,7 +235,7 @@ rule mc_hist_weights:
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
         esac && \
-        python code/histogram.py {input} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS)
+        python code/histogram.py {input.root} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS)
 
 
 _SHAPE_SEED_CASE = "\n".join(
@@ -237,7 +246,8 @@ _SHAPE_SEED_CASE = "\n".join(
 
 rule mc_select_shape:
     input:
-        "merged/{mc}.root",
+        root="merged/{mc}.root",
+        script="code/select.py",
     output:
         "selected/{mc}_signal_{shapevar}.root",
     container:
@@ -247,13 +257,14 @@ rule mc_select_shape:
         case {wildcards.mc}_{wildcards.shapevar} in
 """ + _SHAPE_SEED_CASE + """
         esac && \
-        python code/select.py {input} {output} signal {wildcards.shapevar} $seed
+        python code/select.py {input.root} {output} signal {wildcards.shapevar} $seed
         """)
 
 
 rule mc_hist_shape:
     input:
-        "selected/{mc}_signal_{shapevar}.root",
+        root="selected/{mc}_signal_{shapevar}.root",
+        script="code/histogram.py",
     output:
         "hists/{mc}_{shapevar}.root",
     container:
@@ -264,7 +275,7 @@ rule mc_hist_shape:
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
         esac && \
-        python code/histogram.py {input} {output} """ \
+        python code/histogram.py {input.root} {output} """ \
         "{wildcards.mc}_{wildcards.shapevar} $weight nominal '{{name}}'")
 
 
@@ -298,14 +309,15 @@ rule merge_all:
 
 rule makews:
     input:
-        "merged_all/merged.root",
+        root="merged_all/merged.root",
+        script="code/makews.py",
     output:
         "ws/workspace_combined_meas_model.root",
     container:
         IMG_MAIN
     shell:
         shell_cmd(
-            "python code/makews.py {input} ws/workspace ws/xmldir",
+            "python code/makews.py {input.root} ws/workspace ws/xmldir",
             mkdir="ws/xmldir",
         )
 
@@ -332,14 +344,15 @@ rule plot:
 
 rule hepdata:
     input:
-        "ws/workspace_combined_meas_model.root",
+        root="ws/workspace_combined_meas_model.root",
+        script="code/hepdata_export.py",
     output:
         "hepdata/submission.zip",
     container:
         IMG_MAIN
     shell:
         shell_cmd(
-            "python code/hepdata_export.py {input} "
+            "python code/hepdata_export.py {input.root} "
             "hepdata/submission.yaml hepdata/data1.yaml && "
             "cd hepdata && zip submission.zip submission.yaml data1.yaml",
             mkdir="hepdata",
