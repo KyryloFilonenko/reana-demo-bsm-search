@@ -5,6 +5,10 @@
 # Quick test run:  snakemake --cores 4 --software-deployment-method apptainer \
 #                    --config profile=test
 # On REANA:        reana-client validate -f reana-snakemake.yaml && ...
+#
+# Per-job logs land under logs/<rule>[_<wildcards>].log regardless of what
+# REANA's own job-log viewer shows (see shell_cmd() below for why that
+# distinction matters).
 
 # ---------------------------------------------------------------------------
 # Configuration (full = numbers from databkgmc.yml, test = small local run)
@@ -24,8 +28,28 @@ PROFILES = {
     },
 }
 
+
+def _require_profile_shape(cfg, profile_name):
+    """Fail fast on a malformed profile instead of letting a random rule,
+    three hours into a run, crash on a missing dict key.
+    """
+    samples = ("data", "sig", "mc1", "mc2")
+    for field in ("batches", "nevents"):
+        missing = [s for s in samples if s not in cfg.get(field, {})]
+        if missing:
+            raise ValueError(f"profile {profile_name!r}: {field} missing entries for {missing}")
+    missing_w = [s for s in ("mc1", "mc2") if s not in cfg.get("mc_weights", {})]
+    if missing_w:
+        raise ValueError(f"profile {profile_name!r}: mc_weights missing entries for {missing_w}")
+    if not isinstance(cfg.get("sig_weight"), (int, float)):
+        raise ValueError(f"profile {profile_name!r}: sig_weight must be numeric")
+    return cfg
+
+
 PROFILE = config.get("profile", "full")
-CFG = PROFILES[PROFILE]
+if PROFILE not in PROFILES:
+    raise ValueError(f"unknown profile {PROFILE!r}, choose one of {sorted(PROFILES)}")
+CFG = _require_profile_shape(PROFILES[PROFILE], PROFILE)
 
 BATCHES    = CFG["batches"]
 NEVENTS    = CFG["nevents"]
@@ -39,7 +63,6 @@ WEIGHT_VARIATIONS = "nominal,weight_var1_up,weight_var1_dn"
 SHAPE_VARS = ["shape_conv_up", "shape_conv_dn"]
 
 # Reproducibility: deterministic, per-job-unique seeds.
-# Requires the generantuple.py patch (extra CLI argument + random.seed).
 BASE_SEED = 42
 SEED_OFFSET = {"data": 0, "sig": 100, "mc1": 200, "mc2": 300}
 
@@ -54,16 +77,24 @@ IMG_ROOT6 = "docker://docker.io/reanahub/reana-env-root6:6.18.04"
 ROOTENV = "set +u && source /usr/local/bin/thisroot.sh && "
 
 
-def shell_cmd(cmd, mkdir="$(dirname {output})"):
-    """Source the ROOT env, create the job's output dir, then run cmd.
+def shell_cmd(cmd, mkdir="$(dirname {output:q})"):
+    """Give a rule its own dedicated log file and a guaranteed output dir.
 
-    Every rule below writes into a directory Snakemake doesn't reliably
-    pre-create under REANA (each rule runs in its own container), so this
-    mkdir has to happen inside the job itself. `mkdir` defaults to the
-    output file's own directory; pass an explicit path for rules with
-    multiple outputs or a scratch dir that isn't the output's parent.
+    Two things go wrong under REANA that Snakemake's defaults assume won't:
+    each rule runs in a fresh container, so nothing guarantees the output
+    directory already exists; and REANA's own job-log viewer has, in
+    practice, shown "running" for half an hour on a job that had already
+    crashed. Both get handled once here rather than repeated per rule.
+    Wrapping the ROOT environment sourcing *inside* the redirected block
+    (rather than before it) means a failure in thisroot.sh itself lands in
+    the log too, not just failures in the analysis command that follows it.
+    `mkdir` defaults to the output's own directory; pass an explicit path for
+    rules with more than one output or a scratch directory of their own.
     """
-    return ROOTENV + "mkdir -p " + mkdir + " && " + cmd
+    return (
+        "mkdir -p " + mkdir + " $(dirname {log:q}) && "
+        "{ " + ROOTENV + cmd + " ; } > {log:q} 2>&1"
+    )
 
 
 wildcard_constraints:
@@ -94,16 +125,18 @@ rule generate:
     input:
         "code/generantuple.py",
     output:
-        "generated/{sample}/batch_{b}.root",
+        temp("generated/{sample}/batch_{b}.root"),
+    log:
+        "logs/generate_{sample}_{b}.log",
     container:
         IMG_MAIN
     shell:
         shell_cmd("""
-        case {wildcards.sample} in
+        case {wildcards.sample:q} in
 """ + _GEN_CASE + """
         esac && \
         seed=$(( """ + str(BASE_SEED) + """ + offset + {wildcards.b} )) && \
-        python code/generantuple.py {wildcards.sample} $nevents {output} $seed
+        python code/generantuple.py {wildcards.sample:q} $nevents {output:q} $seed
         """)
 
 
@@ -115,11 +148,13 @@ rule merge_generated:
             b=range(BATCHES[wc.sample]),
         ),
     output:
-        "merged/{sample}.root",
+        temp("merged/{sample}.root"),
+    log:
+        "logs/merge_generated_{sample}.log",
     container:
         IMG_ROOT6
     shell:
-        shell_cmd("hadd {output} {input}")
+        shell_cmd("hadd {output:q} {input:q}")
 
 
 # ---------------------------------------------------------------------------
@@ -130,11 +165,13 @@ rule data_select:
         root="merged/data.root",
         script="code/select.py",
     output:
-        "selected/data_{region}.root",
+        temp("selected/data_{region}.root"),
+    log:
+        "logs/data_select_{region}.log",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/select.py {input.root} {output} {wildcards.region} nominal")
+        shell_cmd("python code/select.py {input.root:q} {output:q} {wildcards.region:q} nominal")
 
 
 rule data_hist_signal:
@@ -142,11 +179,13 @@ rule data_hist_signal:
         root="selected/data_signal.root",
         script="code/histogram.py",
     output:
-        "hists/data_signal.root",
+        temp("hists/data_signal.root"),
+    log:
+        "logs/data_hist_signal.log",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/histogram.py {input.root} {output} data 1.0 nominal")
+        shell_cmd("python code/histogram.py {input.root:q} {output:q} data 1.0 nominal")
 
 
 rule data_hist_control:
@@ -154,13 +193,15 @@ rule data_hist_control:
         root="selected/data_control.root",
         script="code/histogram.py",
     output:
-        "hists/data_control.root",
+        temp("hists/data_control.root"),
+    log:
+        "logs/data_hist_control.log",
     params:
         weight=QCD_WEIGHT,
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/histogram.py {input.root} {output} qcd {params.weight} nominal")
+        shell_cmd("python code/histogram.py {input.root:q} {output:q} qcd {params.weight} nominal")
 
 
 rule data_mergeall:
@@ -168,11 +209,13 @@ rule data_mergeall:
         "hists/data_signal.root",
         "hists/data_control.root",
     output:
-        "branch/data.root",
+        temp("branch/data.root"),
+    log:
+        "logs/data_mergeall.log",
     container:
         IMG_ROOT6
     shell:
-        shell_cmd("hadd {output} {input}")
+        shell_cmd("hadd {output:q} {input:q}")
 
 
 # ---------------------------------------------------------------------------
@@ -183,11 +226,13 @@ rule sig_select:
         root="merged/sig.root",
         script="code/select.py",
     output:
-        "selected/sig_signal.root",
+        temp("selected/sig_signal.root"),
+    log:
+        "logs/sig_select.log",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/select.py {input.root} {output} signal nominal")
+        shell_cmd("python code/select.py {input.root:q} {output:q} signal nominal")
 
 
 rule sig_hist:
@@ -195,13 +240,15 @@ rule sig_hist:
         root="selected/sig_signal.root",
         script="code/histogram.py",
     output:
-        "branch/sig.root",
+        temp("branch/sig.root"),
+    log:
+        "logs/sig_hist.log",
     params:
         weight=SIG_WEIGHT,
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/histogram.py {input.root} {output} signal {params.weight} nominal")
+        shell_cmd("python code/histogram.py {input.root:q} {output:q} signal {params.weight} nominal")
 
 
 # ---------------------------------------------------------------------------
@@ -214,11 +261,13 @@ rule mc_select_weights:
         root="merged/{mc}.root",
         script="code/select.py",
     output:
-        "selected/{mc}_signal_weights.root",
+        temp("selected/{mc}_signal_weights.root"),
+    log:
+        "logs/mc_select_weights_{mc}.log",
     container:
         IMG_MAIN
     shell:
-        shell_cmd("python code/select.py {input.root} {output} signal " + WEIGHT_VARIATIONS)
+        shell_cmd("python code/select.py {input.root:q} {output:q} signal " + WEIGHT_VARIATIONS)
 
 
 rule mc_hist_weights:
@@ -226,16 +275,18 @@ rule mc_hist_weights:
         root="selected/{mc}_signal_weights.root",
         script="code/histogram.py",
     output:
-        "hists/{mc}_weights.root",
+        temp("hists/{mc}_weights.root"),
+    log:
+        "logs/mc_hist_weights_{mc}.log",
     container:
         IMG_MAIN
     shell:
         shell_cmd("""
-        case {wildcards.mc} in
+        case {wildcards.mc:q} in
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
         esac && \
-        python code/histogram.py {input.root} {output} {wildcards.mc} $weight """ + WEIGHT_VARIATIONS)
+        python code/histogram.py {input.root:q} {output:q} {wildcards.mc:q} $weight """ + WEIGHT_VARIATIONS)
 
 
 _SHAPE_SEED_CASE = "\n".join(
@@ -249,15 +300,17 @@ rule mc_select_shape:
         root="merged/{mc}.root",
         script="code/select.py",
     output:
-        "selected/{mc}_signal_{shapevar}.root",
+        temp("selected/{mc}_signal_{shapevar}.root"),
+    log:
+        "logs/mc_select_shape_{mc}_{shapevar}.log",
     container:
         IMG_MAIN
     shell:
         shell_cmd("""
-        case {wildcards.mc}_{wildcards.shapevar} in
+        case {wildcards.mc:q}_{wildcards.shapevar:q} in
 """ + _SHAPE_SEED_CASE + """
         esac && \
-        python code/select.py {input.root} {output} signal {wildcards.shapevar} $seed
+        python code/select.py {input.root:q} {output:q} signal {wildcards.shapevar:q} $seed
         """)
 
 
@@ -266,17 +319,19 @@ rule mc_hist_shape:
         root="selected/{mc}_signal_{shapevar}.root",
         script="code/histogram.py",
     output:
-        "hists/{mc}_{shapevar}.root",
+        temp("hists/{mc}_{shapevar}.root"),
+    log:
+        "logs/mc_hist_shape_{mc}_{shapevar}.log",
     container:
         IMG_MAIN
     shell:
         shell_cmd("""
-        case {wildcards.mc} in
+        case {wildcards.mc:q} in
           mc1) weight=""" + str(MC_WEIGHTS['mc1']) + """ ;;
           mc2) weight=""" + str(MC_WEIGHTS['mc2']) + """ ;;
         esac && \
-        python code/histogram.py {input.root} {output} """ \
-        "{wildcards.mc}_{wildcards.shapevar} $weight nominal '{{name}}'")
+        python code/histogram.py {input.root:q} {output:q} """ \
+        "{wildcards.mc:q}_{wildcards.shapevar:q} $weight nominal '{{name}}'")
 
 
 rule mc_mergeallvars:
@@ -284,11 +339,13 @@ rule mc_mergeallvars:
         "hists/{mc}_weights.root",
         expand("hists/{{mc}}_{sv}.root", sv=SHAPE_VARS),
     output:
-        "branch/{mc}.root",
+        temp("branch/{mc}.root"),
+    log:
+        "logs/mc_mergeallvars_{mc}.log",
     container:
         IMG_ROOT6
     shell:
-        shell_cmd("hadd {output} {input}")
+        shell_cmd("hadd {output:q} {input:q}")
 
 
 # ---------------------------------------------------------------------------
@@ -300,11 +357,13 @@ rule merge_all:
         data="branch/data.root",
         background=expand("branch/{mc}.root", mc=MC_SAMPLES),
     output:
-        "merged_all/merged.root",
+        temp("merged_all/merged.root"),
+    log:
+        "logs/merge_all.log",
     container:
         IMG_ROOT6
     shell:
-        shell_cmd("hadd {output} {input.signal} {input.data} {input.background}")
+        shell_cmd("hadd {output:q} {input.signal:q} {input.data:q} {input.background:q}")
 
 
 rule makews:
@@ -312,13 +371,16 @@ rule makews:
         root="merged_all/merged.root",
         script="code/makews.py",
     output:
-        "ws/workspace_combined_meas_model.root",
+        workspace=temp("ws/workspace_combined_meas_model.root"),
+        xmldir=temp(directory("ws/xmldir")),
+    log:
+        "logs/makews.log",
     container:
         IMG_MAIN
     shell:
         shell_cmd(
-            "python code/makews.py {input.root} ws/workspace ws/xmldir",
-            mkdir="ws/xmldir",
+            "python code/makews.py {input.root:q} ws/workspace {output.xmldir:q}",
+            mkdir="{output.xmldir:q}",
         )
 
 
@@ -328,16 +390,18 @@ rule plot:
     output:
         prefit="plot/prefit.pdf",
         postfit="plot/postfit.pdf",
+    log:
+        "logs/plot.log",
     container:
         IMG_MAIN
     shell:
         shell_cmd(
-            "hfquickplot write-vardef {input} combined plot/nominal_vals.yml && "
-            "hfquickplot plot-channel {input} combined channel1 x plot/nominal_vals.yml "
-            "-c qcd,mc2,mc1,signal -o {output.prefit} && "
-            "hfquickplot fit {input} combined plot/fit_results.yml && "
-            "hfquickplot plot-channel {input} combined channel1 x plot/fit_results.yml "
-            "-c qcd,mc2,mc1,signal -o {output.postfit}",
+            "hfquickplot write-vardef {input:q} combined plot/nominal_vals.yml && "
+            "hfquickplot plot-channel {input:q} combined channel1 x plot/nominal_vals.yml "
+            "-c qcd,mc2,mc1,signal -o {output.prefit:q} && "
+            "hfquickplot fit {input:q} combined plot/fit_results.yml && "
+            "hfquickplot plot-channel {input:q} combined channel1 x plot/fit_results.yml "
+            "-c qcd,mc2,mc1,signal -o {output.postfit:q}",
             mkdir="plot",
         )
 
@@ -348,11 +412,13 @@ rule hepdata:
         script="code/hepdata_export.py",
     output:
         "hepdata/submission.zip",
+    log:
+        "logs/hepdata.log",
     container:
         IMG_MAIN
     shell:
         shell_cmd(
-            "python code/hepdata_export.py {input.root} "
+            "python code/hepdata_export.py {input.root:q} "
             "hepdata/submission.yaml hepdata/data1.yaml && "
             "cd hepdata && zip submission.zip submission.yaml data1.yaml",
             mkdir="hepdata",
