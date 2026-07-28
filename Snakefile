@@ -93,7 +93,7 @@ def shell_cmd(cmd, mkdir="$(dirname {output:q})"):
     """
     return (
         "mkdir -p " + mkdir + " $(dirname {log:q}) && "
-        "{ " + ROOTENV + cmd + " ; } > {log:q} 2>&1"
+        "{{ " + ROOTENV + cmd + " ; }} > {log:q} 2>&1"
     )
 
 
