@@ -1,0 +1,26 @@
+# Snakemake >=9 workflow profile for CERN lxbatch (HTCondor), used via:
+#   pixi run snakemake --workflow-profile lxbatch --config profile=test --cores 1
+#
+# This replaces the hand-rolled condor/submit.sh + status.sh + cancel.sh
+# wrappers (needed only because the lxplus venv's Snakemake predates the
+# executor-plugin system). The plugin owns submission, status polling, and
+# retry/cancel handling instead of us.
+executor: htcondor
+jobs: 5000
+max-jobs-per-second: 100
+max-status-checks-per-second: 100
+restart-times: 3
+local-cores: 4
+htcondor-jobdir: .condor_jobs
+
+# Same container mechanism as before (--use-singularity/--singularity-prefix
+# on the old Snakemake), just invoked through the profile. Keep this prefix
+# off AFS: that's where the AFS-quota/hardlink saga started.
+software-deployment-method: apptainer
+apptainer-prefix: /eos/home-k/kfilonen/singularity_images
+
+default-resources:
+  - getenv=True
+  - htcondor_request_mem_mb=1024
+  - htcondor_request_disk_mb=2048
+  - classad_JobFlavour=espresso

@@ -1,0 +1,20 @@
+[workspace]
+name = "reana-demo-bsm-search"
+version = "0.1.0"
+description = "Snakemake tooling for reana-demo-bsm-search (HTCondor via the native executor plugin)"
+authors = ["KyryloFilonenko"]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[tasks]
+snakemake-dry-run = "snakemake --dry-run --cores 1"
+snakemake-htcondor = "snakemake --workflow-profile lxbatch --cores 1"
+snakemake-htcondor-test = "snakemake --workflow-profile lxbatch --config profile=test --cores 1"
+
+[dependencies]
+python = ">=3.12,<3.13"
+
+[pypi-dependencies]
+snakemake = ">=9,<10"
+python-htcondor = "*"
+snakemake-executor-plugin-htcondor = "*"
