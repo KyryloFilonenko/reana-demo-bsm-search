@@ -23,5 +23,10 @@ if [ ! -f "$VENV/bin/activate" ]; then
 fi
 source "$VENV/bin/activate"
 
+# The project checkout, venv, and HTCondor job I/O all live on EOS; the
+# standard schedd rejects /eos paths in submit files outright, so submission
+# has to go through the EOS-aware schedd instead.
+module load lxbatch/eossubmit
+
 python3 --version
 snakemake --version
