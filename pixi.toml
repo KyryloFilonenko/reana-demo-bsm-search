@@ -13,7 +13,7 @@ snakemake-htcondor-test = "snakemake --workflow-profile lxbatch --config profile
 
 [dependencies]
 python = ">=3.12,<3.13"
-python-htcondor = "*"
+python-htcondor = "<25"
 
 [pypi-dependencies]
 snakemake = ">=9,<10"
