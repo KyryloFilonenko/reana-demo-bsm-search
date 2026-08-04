@@ -8,6 +8,13 @@
 LCG_VIEW=/cvmfs/sft.cern.ch/lcg/views/LCG_110/x86_64-el9-gcc13-opt/setup.sh
 VENV=/eos/home-k/kfilonen/venvs/snakemake9
 
+# Every tool in this stack (pixi/rattler, and Snakemake's own runtime/source
+# cache) defaults to $HOME/.cache, which is AFS and chronically out of
+# quota. Redirect once, here, instead of chasing each tool's own cache dir
+# as it turns up.
+export XDG_CACHE_HOME=/eos/home-k/kfilonen/.cache
+mkdir -p "$XDG_CACHE_HOME"
+
 if [ ! -f "$LCG_VIEW" ]; then
     echo "LCG view not found at $LCG_VIEW -- check available releases under /cvmfs/sft.cern.ch/lcg/views/" >&2
     return 1 2>/dev/null || exit 1
