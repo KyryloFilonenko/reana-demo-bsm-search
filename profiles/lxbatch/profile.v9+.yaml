@@ -12,6 +12,9 @@ max-status-checks-per-second: 100
 restart-times: 3
 local-cores: 4
 htcondor-jobdir: .condor_jobs
+# Worker nodes mount AFS directly, same as the submit host; this stops the
+# plugin from adding our own repo's inputs/outputs to transfer_input_files.
+htcondor-shared-fs-prefixes: /afs
 
 # Same container mechanism as before (--use-singularity/--singularity-prefix
 # on the old Snakemake), just invoked through the profile. Keep this prefix

@@ -6,7 +6,12 @@
 # so both pieces have to be re-sourced together each session. Usage:
 #   source activate-snakemake9.sh
 LCG_VIEW=/cvmfs/sft.cern.ch/lcg/views/LCG_110/x86_64-el9-gcc13-opt/setup.sh
-VENV=/eos/home-k/kfilonen/venvs/snakemake9
+# Must be on AFS, not EOS: the htcondor executor plugin submits
+# sys.executable (this venv's python) as the job's `executable=` attribute,
+# and the standard schedd flatly rejects /eos there. AFS is mounted on the
+# worker nodes too, so a thin (symlink-based) venv here works without any
+# HTCondor-level transfer.
+VENV=$HOME/venvs/snakemake9
 
 # Every tool in this stack (pixi/rattler, and Snakemake's own runtime/source
 # cache) defaults to $HOME/.cache, which is AFS and chronically out of
@@ -30,10 +35,9 @@ if [ ! -f "$VENV/bin/activate" ]; then
 fi
 source "$VENV/bin/activate"
 
-# The project checkout, venv, and HTCondor job I/O all live on EOS; the
-# standard schedd rejects /eos paths in submit files outright, so submission
-# has to go through the EOS-aware schedd instead.
-module load lxbatch/eossubmit
+# The venv and the project checkout both live on AFS now (see VENV comment
+# above), so the standard schedd's shared-filesystem model applies -- no
+# module load lxbatch/eossubmit here, and no /eos paths in job I/O.
 
 python3 --version
 snakemake --version
