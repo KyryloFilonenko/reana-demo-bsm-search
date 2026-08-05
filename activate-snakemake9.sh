@@ -30,7 +30,7 @@ if [ ! -f "$VENV/bin/activate" ]; then
     echo "venv not found at $VENV -- create it first:" >&2
     echo "  python3 -m venv $VENV" >&2
     echo "  source $VENV/bin/activate" >&2
-    echo "  pip install \"snakemake>=9,<10\" snakemake-executor-plugin-htcondor python-htcondor" >&2
+    echo "  pip install \"snakemake>=9,<10\" snakemake-executor-plugin-htcondor htcondor" >&2
     return 1 2>/dev/null || exit 1
 fi
 source "$VENV/bin/activate"
