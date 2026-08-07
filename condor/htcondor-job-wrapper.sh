@@ -8,4 +8,10 @@
 # though the exact same interpreter, invoked from inside a shell script
 # (this file's approach), works fine and resolves AFS/CVMFS/pyvenv.cfg
 # correctly. Root cause not fully pinned down; this wrapper sidesteps it.
-exec /afs/cern.ch/user/k/kfilonen/venvs/snakemake9/bin/python3 -m snakemake "$@"
+#
+# The plugin hands this wrapper the complete, already-assembled command
+# (python path, -m snakemake, and the real job args) as arguments -- it
+# doesn't strip anything for us here, so just re-exec verbatim rather than
+# building a new "python3 -m snakemake ..." command (that would duplicate
+# -m snakemake and break argument parsing).
+exec "$@"
