@@ -56,3 +56,8 @@ default-resources:
   # when HTCondor launches it directly as the job's own "executable"
   # (sys.executable, a symlink). Routing through this wrapper avoids that.
   - job_wrapper=condor/htcondor-job-wrapper.sh
+  # The plugin never sets initialdir, so jobs run in HTCondor's own scratch
+  # directory on the worker instead of our checkout -- rules complete
+  # successfully but Snakemake can't find the (relative-path) outputs
+  # afterwards ("parent dir not present"). Pin it to the AFS checkout.
+  - htcondor_submit_initialdir=/afs/cern.ch/user/k/kfilonen/reana-demo-bsm-search
