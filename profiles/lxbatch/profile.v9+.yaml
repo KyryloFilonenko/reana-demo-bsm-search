@@ -50,3 +50,9 @@ default-resources:
   # -- the htcondor_submit_ prefix auto-quotes string values, which mangles
   # a boolean expression like this one.)
   - 'requirements=(OpSysAndVer =?= "AlmaLinux9")'
+  # Confirmed by a standalone condor_submit test: the venv's python runs
+  # fine on the worker (AFS, CVMFS, pyvenv.cfg, sys.path all resolve
+  # correctly) when invoked from inside a shell script -- it only crashes
+  # when HTCondor launches it directly as the job's own "executable"
+  # (sys.executable, a symlink). Routing through this wrapper avoids that.
+  - job_wrapper=condor/htcondor-job-wrapper.sh
