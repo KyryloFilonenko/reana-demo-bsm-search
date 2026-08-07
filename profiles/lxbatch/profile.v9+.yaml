@@ -16,6 +16,22 @@ htcondor-jobdir: .condor_jobs
 # plugin from adding our own repo's inputs/outputs to transfer_input_files.
 htcondor-shared-fs-prefixes: /afs
 
+# Without this, the plugin forces should_transfer_files=YES, which makes
+# HTCondor copy the job's executable (sys.executable -- our thin AFS venv's
+# python) into an isolated per-job sandbox. Once copied, it loses its
+# sibling pyvenv.cfg and can't find its stdlib ("Failed to import encodings
+# module") -- same crash as the earlier EosSubmit/--copies problem, different
+# cause. Declaring the filesystem shared here leaves should_transfer_files
+# unset, so HTCondor runs the job in place instead.
+shared-fs-usage:
+  - persistence
+  - software-deployment
+  - software-deployment-cache
+  - source-cache
+  - sources
+  - input-output
+  - storage-local-copies
+
 # Same container mechanism as before (--use-singularity/--singularity-prefix
 # on the old Snakemake), just invoked through the profile. Keep this prefix
 # off AFS: that's where the AFS-quota/hardlink saga started.
@@ -34,11 +50,3 @@ default-resources:
   # -- the htcondor_submit_ prefix auto-quotes string values, which mangles
   # a boolean expression like this one.)
   - 'requirements=(OpSysAndVer =?= "AlmaLinux9")'
-  # HTCondor's default behavior copies the "executable" (here, sys.executable
-  # -- our thin AFS venv's python) into an isolated per-job sandbox before
-  # running it, even though htcondor-shared-fs-prefixes already stops our own
-  # input/output files from being copied. Once copied, the interpreter loses
-  # its sibling pyvenv.cfg and can't find its stdlib -- same "Failed to
-  # import encodings module" crash as the earlier EosSubmit/--copies problem,
-  # different cause. AFS really is shared, so disable transfer entirely.
-  - 'htcondor_submit_should_transfer_files=NO'
