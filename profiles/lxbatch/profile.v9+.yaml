@@ -30,4 +30,7 @@ default-resources:
   # Our venv's python comes from the el9-specific LCG view; lxbatch also has
   # el8 execute nodes, and that binary crashes at startup there ("Failed to
   # import encodings module"). Pin to el9 so it always matches its own ABI.
-  - 'htcondor_submit_requirements=(OpSysAndVer =?= "AlmaLinux9")'
+  # (Must be the bare "requirements" key, not "htcondor_submit_requirements"
+  # -- the htcondor_submit_ prefix auto-quotes string values, which mangles
+  # a boolean expression like this one.)
+  - 'requirements=(OpSysAndVer =?= "AlmaLinux9")'
