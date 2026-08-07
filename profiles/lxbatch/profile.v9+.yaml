@@ -34,3 +34,11 @@ default-resources:
   # -- the htcondor_submit_ prefix auto-quotes string values, which mangles
   # a boolean expression like this one.)
   - 'requirements=(OpSysAndVer =?= "AlmaLinux9")'
+  # HTCondor's default behavior copies the "executable" (here, sys.executable
+  # -- our thin AFS venv's python) into an isolated per-job sandbox before
+  # running it, even though htcondor-shared-fs-prefixes already stops our own
+  # input/output files from being copied. Once copied, the interpreter loses
+  # its sibling pyvenv.cfg and can't find its stdlib -- same "Failed to
+  # import encodings module" crash as the earlier EosSubmit/--copies problem,
+  # different cause. AFS really is shared, so disable transfer entirely.
+  - 'htcondor_submit_should_transfer_files=NO'
